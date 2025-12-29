@@ -616,9 +616,11 @@ type Row struct {
 	Content  TextHorizontal
 }
 
-func (r Row) IsSamePosition(position float64, tolerance float64) bool {
-	return position > r.Position-tolerance && position < r.Position+tolerance
-	// return position == r.Position
+func (r Row) IsSamePosition(position float64, tolerance *float64) bool {
+	if tolerance == nil {
+		return int64(position) == int64(r.Position)
+	}
+	return position > r.Position-*tolerance && position < r.Position+*tolerance
 }
 
 // Rows is a list of rows
@@ -626,9 +628,7 @@ type Rows []*Row
 
 // GetTextByRow returns the page's all text grouped by rows
 func (p Page) GetTextByRow(options ...GetTextOption) (Rows, error) {
-	optns := getTextOptions{
-		positionTolerance: 1.1,
-	}
+	var optns getTextOptions
 	for _, option := range options {
 		option(&optns)
 	}
@@ -1078,10 +1078,10 @@ type GetTextOption func(*getTextOptions)
 
 func WithGetTextPositionTolerance(positionTolerance float64) GetTextOption {
 	return func(opts *getTextOptions) {
-		opts.positionTolerance = positionTolerance
+		opts.positionTolerance = &positionTolerance
 	}
 }
 
 type getTextOptions struct {
-	positionTolerance float64
+	positionTolerance *float64
 }
