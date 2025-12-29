@@ -612,15 +612,27 @@ func (p Page) GetTextByColumn() (Columns, error) {
 
 // Row represents the contents of a row
 type Row struct {
-	Position int64
+	Position float64
 	Content  TextHorizontal
+}
+
+func (r Row) IsSamePosition(position float64, tolerance float64) bool {
+	return position > r.Position-tolerance && position < r.Position+tolerance
+	// return position == r.Position
 }
 
 // Rows is a list of rows
 type Rows []*Row
 
 // GetTextByRow returns the page's all text grouped by rows
-func (p Page) GetTextByRow() (Rows, error) {
+func (p Page) GetTextByRow(options ...GetTextOption) (Rows, error) {
+	optns := getTextOptions{
+		positionTolerance: 1.1,
+	}
+	for _, option := range options {
+		option(&optns)
+	}
+
 	result := Rows{}
 	var err error
 
@@ -653,7 +665,8 @@ func (p Page) GetTextByRow() (Rows, error) {
 		var currentRow *Row
 		rowFound := false
 		for _, row := range result {
-			if int64(currentY) == row.Position {
+			// if int64(currentY) == row.Position {
+			if row.IsSamePosition(currentY, optns.positionTolerance) {
 				currentRow = row
 				rowFound = true
 				break
@@ -662,7 +675,7 @@ func (p Page) GetTextByRow() (Rows, error) {
 
 		if !rowFound {
 			currentRow = &Row{
-				Position: int64(currentY),
+				Position: currentY,
 				Content:  TextHorizontal{},
 			}
 			result = append(result, currentRow)
@@ -752,19 +765,19 @@ func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s strin
 		}
 	})
 }
-//
+
 // Content returns the page's content.
 //
-// bugfix: 
+// bugfix:
+//
 //	the /Content may contain an array of refs
 //	this leads to an endless loop
-//
 func (p Page) Content() Content {
-	
+
 	var text []Text
 	var rect []Rect
-	
-	//fmt.Println("page=",p)
+
+	// fmt.Println("page=",p)
 	strm := p.V.Key("Contents")
 
 	if strm.Len() == 0 {
@@ -774,12 +787,12 @@ func (p Page) Content() Content {
 	} else {
 		for i := 0; i < strm.Len(); i++ {
 			strmindex := strm.Index(i)
-			//fmt.Println("stream ",i,"=",strmindex)
+			// fmt.Println("stream ",i,"=",strmindex)
 
 			c := p.readContent(strmindex)
 			text = append(text, c.Text...)
 			rect = append(rect, c.Rect...)
-		}	
+		}
 	}
 	return Content{text, rect}
 }
@@ -791,7 +804,7 @@ func (p Page) readContent(strm Value) Content {
 		Th:  1,
 		CTM: ident,
 	}
-	
+
 	var text []Text
 	showText := func(s string) {
 		n := 0
@@ -844,13 +857,13 @@ func (p Page) readContent(strm Value) Content {
 			g.CTM = m.mul(g.CTM)
 
 		case "gs": // set parameters from graphics state resource
-			//gs := p.Resources().Key("ExtGState").Key(args[0].Name())
-			//font := gs.Key("Font")
-			//if font.Kind() == Array && font.Len() == 2 {
+			// gs := p.Resources().Key("ExtGState").Key(args[0].Name())
+			// font := gs.Key("Font")
+			// if font.Kind() == Array && font.Len() == 2 {
 			// if DebugOn {
 			// 	fmt.Println("FONT", font)
 			// }
-			//}
+			// }
 
 		case "f": // fill
 		case "g": // setgray
@@ -872,7 +885,7 @@ func (p Page) readContent(strm Value) Content {
 
 		case "Q": // restore graphics state
 			n := len(gstack) - 1
-			if n >= 0 {	// bugfix: don't raise an exception
+			if n >= 0 { // bugfix: don't raise an exception
 				g = gstack[n]
 				gstack = gstack[:n]
 			}
@@ -944,7 +957,7 @@ func (p Page) readContent(strm Value) Content {
 			showText(args[0].RawString())
 
 		case "TJ": // show text, allowing individual glyph positioning
-			if len(args) > 0 {	// bugfix: don't raise an exception
+			if len(args) > 0 { // bugfix: don't raise an exception
 				v := args[0]
 				for i := 0; i < v.Len(); i++ {
 					x := v.Index(i)
@@ -1059,4 +1072,16 @@ func buildOutline(entry Value) Outline {
 		x.Child = append(x.Child, buildOutline(child))
 	}
 	return x
+}
+
+type GetTextOption func(*getTextOptions)
+
+func WithGetTextPositionTolerance(positionTolerance float64) GetTextOption {
+	return func(opts *getTextOptions) {
+		opts.positionTolerance = positionTolerance
+	}
+}
+
+type getTextOptions struct {
+	positionTolerance float64
 }
